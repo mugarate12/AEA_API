@@ -115,13 +115,20 @@ router.post('/documents/:documentId/sign', verifyToken, async (request, reply) =
     const id = request.params.documentId
     const signer = new Signer()
     const doc = new Doc()
-    const result = await signer.complete(id);
 
-    if (result.status === 200) {
-        doc.complete(id, name, email)
-        return reply.status(result.status).send({ message: result.message })
-    } else {
-        return reply.status(result.status).send({ message: result.message })
+    try {
+        const result = await signer.complete(id);
+
+        if (result.status === 200) {
+            await doc.complete(id, name, email)
+            return reply.status(result.status).send({ message: result.message })
+        } else {
+            return reply.status(result.status).send({ message: result.message })
+        }
+    } catch (error) {
+        return reply.status(500).send({
+            message: `Erro ao completar a assinatura: ${error.message}! Por favor, tente novamente`
+        });
     }
 })
 

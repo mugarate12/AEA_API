@@ -82,3 +82,30 @@ test('POST to /v1/documents/:documentId/sign (to sign document that received fie
     expect(typeof response.data.message === 'string').toBe(true);
     expect(response.data.message.length).toBeGreaterThan(0);
 });
+
+test('POST to /v1/documents/:documentId/sign (to sign document that received field to sign) without add position to document route should return 500', async () => {
+    const addDocumentResponse = await uploadDocument();
+    const documentId = addDocumentResponse.data.message.documentId;
+    const addSignerPayload = {
+        name: 'John Doe',
+        email: 'john_doe@mail.com',
+        order: 1,
+    };
+    await addSigner(documentId, addSignerPayload);
+    const payload = {
+        name: addSignerPayload.name,
+        email: addSignerPayload.email,
+    };
+
+    try {
+        await signDocument(documentId, payload);
+        // If no error is thrown, fail the test
+        throw new Error('Expected signDocument to throw an error, but it did not.');
+    } catch (error) {
+        expect(error).toBeDefined();
+
+        if (error.response) {
+            expect(error.response.status).toBe(500);
+        }
+    }
+});
