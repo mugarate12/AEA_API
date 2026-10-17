@@ -5,21 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>View PDF</title>
     <style>
+      :root {
+        --primary: #1f7a3c;
+        --primary-dark: #14532d;
+        --primary-light: #e8f3ea;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --border: #c9d9cd;
+      }
       body {
         display: flex;
         margin: 0;
         height: 100vh;
         overflow: hidden;
+        font-family: Helvetica, Arial, sans-serif;
+        color: var(--text);
+      }
+      #viewer {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        border-right: 1px solid #ddd;
+        background-color: #f0f0f0;
+      }
+      #pager {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 8px;
+        background-color: #fff;
+        border-bottom: 1px solid #ddd;
+        font-size: 14px;
+      }
+      #pager button {
+        background-color: #fff;
+        color: var(--primary);
+        border: 1px solid var(--primary);
+        border-radius: 4px;
+        padding: 4px 12px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      #pager button:disabled {
+        color: #aaa;
+        border-color: #ccc;
+        cursor: not-allowed;
       }
       #pdf-renderer {
-        width: 100%;
         flex: 1;
-        border-right: 1px solid #ddd;
-        position: relative;
+        min-height: 0;
+        overflow: auto;
         display: flex;
         justify-content: center;
+        align-items: flex-start;
+        padding: 16px;
+      }
+      #page-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        background-color: #fff;
+      }
+      #pdf-canvas {
+        display: block;
+      }
+      /* Placeholder com a mesma geometria do carimbo real (src/shared/signature-stamp.js),
+         em escala: aba de 12pt centralizada sobre a borda superior do cartão. */
+      .signature-placeholder {
+        --s: 1;
+        position: absolute;
+        cursor: move;
+        user-select: none;
+        visibility: hidden;
+        box-sizing: border-box;
+      }
+      .signature-placeholder .ph-card {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(6px * var(--s));
+        bottom: 0;
+        box-sizing: border-box;
+        border: 1.5px dashed var(--primary);
+        border-radius: calc(6px * var(--s));
+        background-color: rgba(232, 243, 234, 0.85);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
         align-items: center;
-        background-color: #f0f0f0;
+        gap: calc(3px * var(--s));
+        text-align: center;
+        padding: 0 calc(12px * var(--s));
+      }
+      .signature-placeholder .ph-tab {
+        position: absolute;
+        top: 0;
+        left: calc(12px * var(--s));
+        height: calc(12px * var(--s));
+        padding: 0 calc(7px * var(--s));
+        border-radius: calc(3px * var(--s));
+        background-color: rgba(31, 122, 60, 0.75);
+        color: #fff;
+        font-weight: bold;
+        font-size: calc(6px * var(--s));
+        line-height: calc(12px * var(--s));
+        white-space: nowrap;
+      }
+      .signature-placeholder .ph-hint {
+        color: var(--primary-dark);
+        font-weight: bold;
+        font-size: max(11px, calc(9px * var(--s)));
+      }
+      .signature-placeholder .ph-name {
+        color: var(--muted);
+        font-size: max(10px, calc(7.5px * var(--s)));
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .signature-placeholder.placed .ph-card {
+        border-style: solid;
       }
       #menu {
         width: 300px;
@@ -31,47 +139,48 @@
         align-items: center;
         justify-content: space-between;
       }
-      #pdf-canvas {
-        cursor: pointer;
-        display: block;
-        position: absolute;
-        left: 0;
-        top: 0;
-      }
-      .signature-placeholder {
-        width: 120px;
-        height: 70px;
-        background-color: rgba(0, 0, 255, 0.5);
-        color: white;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        position: absolute;
-        top: 70px;
-        right: 200px;
-        cursor: move;
-        border-radius: 4px;
-        user-select: none;
-        text-align: center;
-      }
       #menu .signature-preview {
+        position: relative;
         width: 100%;
-        height: auto;
-        border: 1px dashed #ccc;
+        box-sizing: border-box;
+        border: 1px solid var(--primary);
+        border-radius: 6px;
         background-color: #fff;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: flex-start;
-        padding: 10px;
-        font-size: 14px;
-        color: #333;
+        padding: 18px 12px 10px;
+        margin-top: 8px;
+        font-size: 13px;
+      }
+      .signature-preview .preview-tab {
+        position: absolute;
+        top: -8px;
+        left: 12px;
+        background-color: var(--primary);
+        color: #fff;
+        font-size: 9px;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 3px;
       }
       .signature-preview p {
-        margin: 5px 0;
+        margin: 6px 0;
+        overflow-wrap: anywhere;
+      }
+      .signature-preview .label {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .signature-preview .value {
+        font-weight: bold;
+      }
+      #placement-status {
+        margin: 12px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+        text-align: center;
       }
       #menu button {
-        background-color: #007bff;
+        background-color: var(--primary);
         color: white;
         padding: 10px 20px;
         border: none;
@@ -81,7 +190,7 @@
         transition-duration: 0.3s;
       }
       #menu button:hover {
-        background-color: #0056b3;
+        background-color: var(--primary-dark);
       }
       #menu button:disabled {
         background-color: #ccc;
@@ -100,18 +209,34 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   </head>
   <body>
-    <div id="pdf-renderer">
-      <canvas id="pdf-canvas"></canvas>
-      <div id="signature" class="signature-placeholder" draggable="true">
-        Arraste para o Local da Assinatura.
+    <div id="viewer">
+      <div id="pager">
+        <button type="button" id="prev-page" disabled>Anterior</button>
+        <span id="page-info">Página 1 de 1</span>
+        <button type="button" id="next-page" disabled>Próxima</button>
+      </div>
+      <div id="pdf-renderer">
+        <div id="page-wrapper">
+          <canvas id="pdf-canvas"></canvas>
+          <div id="signature" class="signature-placeholder" draggable="true">
+            <div class="ph-card">
+              <span class="ph-hint">Arraste para o local da assinatura</span>
+              <span class="ph-name"><%= signerName %></span>
+            </div>
+            <div class="ph-tab">DOCUMENTO ASSINADO ELETRONICAMENTE</div>
+          </div>
+        </div>
       </div>
     </div>
     <div id="menu">
-      <div class="signature-preview">
-        <p>Previa da Assinatura</p>
-        <p id="user-name">Nome: <%= signerName %></p>
-        <p id="user-email">E-mail: <%= signerEmail %></p>
-        <p id="timestamp">Data e Hora:</p>
+      <div style="width: 100%">
+        <div class="signature-preview">
+          <span class="preview-tab">PRÉVIA DA ASSINATURA</span>
+          <p><span class="label">Nome</span><span class="value"><%= signerName %></span></p>
+          <p><span class="label">E-mail</span><span class="value"><%= signerEmail %></span></p>
+          <p><span class="label">Data e hora</span><span class="value" id="timestamp"></span></p>
+        </div>
+        <p id="placement-status">Arraste o quadro verde até o local da assinatura.</p>
       </div>
       <label for="code" id="auth">
         <!-- Codigo de Autenticação: -->
@@ -123,60 +248,128 @@
       // const pdfUrl = "/v1/documents/uploads/<%= id %>.pdf";
       const pdfUrl = "<%= docLink %>";
 
+      // Tamanho do carimbo em pontos PDF (mesmo valor usado no backend).
+      const STAMP_WIDTH = <%= Number(stampWidth) %>;
+      const STAMP_HEIGHT = <%= Number(stampHeight) %>;
+
       const canvas = document.getElementById("pdf-canvas");
       const ctx = canvas.getContext("2d");
+      const wrapper = document.getElementById("page-wrapper");
+      const container = document.getElementById("pdf-renderer");
       const signature = document.getElementById("signature");
       const signButton = document.getElementById("sign-button");
+      const prevButton = document.getElementById("prev-page");
+      const nextButton = document.getElementById("next-page");
+      const pageInfo = document.getElementById("page-info");
+      const placementStatus = document.getElementById("placement-status");
 
-      const userName = "<%= signerName %>";
-      const userEmail = "<%= signerEmail %>";
+      const userName = <%- JSON.stringify(String(signerName)).replace(/</g, "\\u003c") %>;
+      const userEmail = <%- JSON.stringify(String(signerEmail)).replace(/</g, "\\u003c") %>;
 
-      //document.getElementById('user-name').textContent = `Nome: ${userName}`;
-      //document.getElementById('user-email').textContent = `E-mail: ${userEmail}`;
+      // Data/hora no horário de Brasília, igual ao carimbo.
+      const dateTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      });
 
       function formatTimestamp() {
-        const now = new Date();
-        return `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+        const parts = Object.fromEntries(
+          dateTimeFormatter.formatToParts(new Date()).map((part) => [part.type, part.value])
+        );
+        return `${parts.day}/${parts.month}/${parts.year} às ${parts.hour}:${parts.minute}:${parts.second}`;
       }
 
-      document.getElementById(
-        "timestamp"
-      ).textContent = `Data e Hora: ${formatTimestamp()}`;
+      const timestamp = document.getElementById("timestamp");
+      timestamp.textContent = formatTimestamp();
+      setInterval(() => (timestamp.textContent = formatTimestamp()), 1000);
 
       const pdfjsLib = window["pdfjs-dist/build/pdf"];
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
       let pdfDoc = null;
-      let scale = 1.5;
-      let pdfViewport = null;
+      let currentPage = 1;
+      let pdfViewport = null; // viewport (em pixels CSS) da página exibida
+      let renderTask = null;
+      // Última posição salva: { page, x, y } em coordenadas PDF (canto superior esquerdo).
+      let savedField = null;
 
-      function renderPage(pageNum) {
-        pdfDoc.getPage(pageNum).then((page) => {
-          const container = document.getElementById("pdf-renderer");
-          const containerWidth = container.offsetWidth;
-          const containerHeight = container.offsetHeight;
-
-          const viewport = page.getViewport({ scale: 1 });
-          const scaleX = containerWidth / viewport.width;
-          const scaleY = containerHeight / viewport.height;
-
-          const scale = Math.min(scaleX, scaleY);
-          const adjustedViewport = page.getViewport({ scale });
-
-          canvas.width = adjustedViewport.width;
-          canvas.height = adjustedViewport.height;
-
-          pdfViewport = adjustedViewport;
-
-          const renderContext = {
-            canvasContext: ctx,
-            viewport: adjustedViewport,
-          };
-
-          page.render(renderContext);
-        });
+      function placeSignature(left, top) {
+        signature.style.left = `${left}px`;
+        signature.style.top = `${top}px`;
+        signature.style.visibility = "visible";
       }
+
+      function clampToPage(left, top) {
+        return [
+          Math.max(0, Math.min(left, pdfViewport.width - signature.offsetWidth)),
+          Math.max(0, Math.min(top, pdfViewport.height - signature.offsetHeight)),
+        ];
+      }
+
+      async function renderPage(pageNum) {
+        const page = await pdfDoc.getPage(pageNum);
+
+        // Ajusta a página à área disponível (largura e altura).
+        const base = page.getViewport({ scale: 1 });
+        const availableWidth = container.clientWidth - 32;
+        const availableHeight = container.clientHeight - 32;
+        const scale = Math.min(availableWidth / base.width, availableHeight / base.height);
+        const viewport = page.getViewport({ scale });
+        const dpr = window.devicePixelRatio || 1;
+
+        if (renderTask) renderTask.cancel();
+
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        wrapper.style.width = `${viewport.width}px`;
+        wrapper.style.height = `${viewport.height}px`;
+        pdfViewport = viewport;
+
+        renderTask = page.render({
+          canvasContext: ctx,
+          viewport,
+          transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+        });
+        renderTask.promise.catch(() => {});
+
+        // O placeholder tem o tamanho real do carimbo na escala atual.
+        signature.style.setProperty("--s", scale);
+        signature.style.width = `${STAMP_WIDTH * scale}px`;
+        signature.style.height = `${STAMP_HEIGHT * scale}px`;
+
+        if (savedField && savedField.page === pageNum) {
+          const [left, top] = viewport.convertToViewportPoint(savedField.x, savedField.y);
+          placeSignature(...clampToPage(left, top));
+          signature.classList.add("placed");
+        } else {
+          placeSignature(...clampToPage(viewport.width - STAMP_WIDTH * scale - 24, 24));
+          signature.classList.remove("placed");
+        }
+
+        currentPage = pageNum;
+        pageInfo.textContent = `Página ${pageNum} de ${pdfDoc.numPages}`;
+        prevButton.disabled = pageNum <= 1;
+        nextButton.disabled = pageNum >= pdfDoc.numPages;
+      }
+
+      prevButton.addEventListener("click", () => {
+        if (currentPage > 1) renderPage(currentPage - 1);
+      });
+      nextButton.addEventListener("click", () => {
+        if (pdfDoc && currentPage < pdfDoc.numPages) renderPage(currentPage + 1);
+      });
+      window.addEventListener("resize", () => {
+        if (pdfDoc) renderPage(currentPage);
+      });
 
       pdfjsLib.getDocument(pdfUrl).promise.then((pdf) => {
         pdfDoc = pdf;
@@ -190,37 +383,27 @@
         const rect = signature.getBoundingClientRect();
         dragOffsetX = event.clientX - rect.left;
         dragOffsetY = event.clientY - rect.top;
-        console.log(dragOffsetX, dragOffsetY);
-
-        //event.dataTransfer.setDragImage(new Image(), 0, 0)
       });
 
-      canvas.addEventListener("dragover", (event) => {
+      wrapper.addEventListener("dragover", (event) => {
         event.preventDefault();
       });
 
-      canvas.addEventListener("drop", async (event) => {
+      wrapper.addEventListener("drop", async (event) => {
         event.preventDefault();
+        if (!pdfViewport) return;
 
+        // Canto superior esquerdo do placeholder, em pixels CSS relativos à página.
         const rect = canvas.getBoundingClientRect();
+        const [left, top] = clampToPage(
+          event.clientX - rect.left - dragOffsetX,
+          event.clientY - rect.top - dragOffsetY
+        );
+        placeSignature(left, top);
 
-        const xCanvas = event.clientX - rect.left - dragOffsetX;
-        const yCanvas = event.clientY - rect.top - dragOffsetY;
-
-        signature.style.left = `${Math.max(
-          0,
-          Math.min(xCanvas, canvas.width - signature.offsetWidth)
-        )}px`;
-        signature.style.top = `${Math.max(
-          0,
-          Math.min(yCanvas, canvas.height - signature.offsetHeight)
-        )}px`;
-
-        // Converta para coordenadas do PDF para enviar ao backend
-        const xPdf = (xCanvas / canvas.width) * pdfViewport.width;
-        const yPdf =
-          pdfViewport.height -
-          (yCanvas / canvas.height) * pdfViewport.height;
+        // Converte para coordenadas do PDF (y a partir da base da página).
+        const [xPdf, yPdf] = pdfViewport.convertToPdfPoint(left, top);
+        const pageNum = currentPage;
 
         await fetch(`/v1/documents/<%= id %>/signature-fields`, {
           method: "POST",
@@ -232,29 +415,23 @@
             id: "<%= id %>",
             x: xPdf,
             y: yPdf,
+            page: pageNum,
             email: userEmail,
           }),
         })
-          .then((response) => response.json())
-          .then(async (data) => {
-            console.log(data);
-            const field = await new Field().getField("<%= id %>");
-            const signatureHeight = 70;
-
-            pdfDoc.getPage(1).then((page) => {
-              page.drawText(
-                `Assinado digitalmente por:\n${userName.toUpperCase()}\n${userEmail}\nData: ${formatTimestamp()}`,
-                {
-                  x: field[0].x - signatureWidth ,
-                  y: field[0].y - signatureHeight,
-                  size: 14,
-                }
-              );
-            });
+          .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
           })
-          .catch((error) =>
-            console.error("Erro ao salvar coordenadas:", error)
-          );
+          .then(() => {
+            savedField = { page: pageNum, x: xPdf, y: yPdf };
+            signature.classList.add("placed");
+            placementStatus.textContent = `Assinatura posicionada na página ${pageNum}.`;
+          })
+          .catch((error) => {
+            console.error("Erro ao salvar coordenadas:", error);
+            placementStatus.textContent = "Não foi possível salvar a posição. Tente novamente.";
+          });
       });
 
       // assinar documento

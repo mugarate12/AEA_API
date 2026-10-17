@@ -70,6 +70,19 @@ export class DB {
             } else {
                 console.log("Banco de dados já inicializado. Nenhuma ação necessária.");
             }
+
+            // Migração idempotente: bancos antigos podem não ter a coluna `page`.
+            // Só executa o ALTER (que bloqueia a tabela) quando a coluna falta;
+            // linhas existentes ficam com page = 1 (comportamento anterior).
+            const pageColumn = await sql`
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = 'signfield' AND column_name = 'page'
+            `;
+
+            if (pageColumn.length === 0) {
+                await sql`ALTER TABLE signfield ADD COLUMN IF NOT EXISTS page INT NOT NULL DEFAULT 1`;
+                console.log("Coluna signfield.page adicionada.");
+            }
         } catch (err) {
             console.error("Erro ao criar banco de dados:", err);
         }

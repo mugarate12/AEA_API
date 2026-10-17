@@ -9,6 +9,7 @@ import { config } from '../multerConfig.js'; // configurar o multer
 import { Doc } from '../doc.js';             // manipular documentos no db
 import { Signer } from '../signers.js';      // manipular assinantes no db
 import { Field } from '../field.js';         // manipular campos no db
+import { STAMP_WIDTH, STAMP_HEIGHT } from './shared/signature-stamp.js';
 
 dotenv.config({
     path: process.env.NODE_ENV === 'production' ? '.env' : '.env.development',
@@ -54,6 +55,8 @@ router.get('/documents/:documentId/prepare-signature', async (request, reply) =>
             signerName,
             signerEmail,
             token,
+            stampWidth: STAMP_WIDTH,
+            stampHeight: STAMP_HEIGHT,
             docLink: typeof docDetails === 'object' ? docDetails.message.links.doc : '',
         });
     }
@@ -102,9 +105,11 @@ router.post('/documents/:documentId/signers', verifyToken, async (request, reply
 //ADICIONAR O CAMPO DA ASSINATURA
 router.post('/documents/:documentId/signature-fields', verifyToken, async (request, reply) => {
     const { x, y, email } = request.body
+    // `page` é opcional (1-based); clientes antigos que não enviam assinam na página 1.
+    const page = Number(request.body.page);
     const id = request.params.documentId
     const signer = new Field()
-    const result = await signer.addField(id, email, x, y);
+    const result = await signer.addField(id, email, x, y, Number.isInteger(page) && page >= 1 ? page : 1);
 
     return reply.status(result.status).send({ message: result.message })
 })

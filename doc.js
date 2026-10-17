@@ -5,6 +5,7 @@ import unlink from 'fs';
 import { sql } from './db.js';
 import { Field } from './field.js'
 import { UploadFile } from './src/shared/upload.js';
+import { drawSignatureStamp } from './src/shared/signature-stamp.js';
 
 export class Doc {
     constructor() {
@@ -41,19 +42,32 @@ export class Doc {
     }
 
     async complete(docId, name, email) {
-        const now = new Date();
-        const field = await new Field().getField(docId);
-        const date = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+        // A data/hora é formatada no horário de Brasília dentro do carimbo.
+        const signedAt = new Date();
+        const [field] = await new Field().getField(docId);
+
+        if (!field) {
+            throw new Error('Posição da assinatura não definida para o documento');
+        }
 
         const filename = `${docId}.pdf`;
         const buffer = await this.uploadFile.read(filename);
         const pdfDoc = await PDFDocument.load(buffer);
-        const page = pdfDoc.getPages()[0];
 
-        page.drawText(`Assinado digitalmente por:\n${name.toUpperCase()}\n${email}\nData: ${date}`, {
-            x: field[0].x,
-            y: field[0].y,
-            size: 14,
+        // Página escolhida no preview (1-based); fora do intervalo, assina a primeira.
+        const pages = pdfDoc.getPages();
+        const pageNumber = Number.isInteger(field.page) && field.page >= 1 && field.page <= pages.length
+            ? field.page
+            : 1;
+        const page = pages[pageNumber - 1];
+
+        await drawSignatureStamp(pdfDoc, page, {
+            x: field.x,
+            y: field.y,
+            name,
+            email,
+            signedAt,
+            documentId: docId,
         });
 
         // pdfDoc.getPermissions().set
