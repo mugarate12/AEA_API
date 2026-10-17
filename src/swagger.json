@@ -363,11 +363,18 @@
                     "email": {
                         "type": "string",
                         "format": "email"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1,
+                        "description": "Página (1-based) onde o carimbo será aplicado. Opcional; valores inválidos ou fora do documento usam a página 1."
                     }
                 },
                 "example": {
                     "x": 52.053,
                     "y": 89.009,
+                    "page": 1,
                     "email": "user@example.com"
                 }
             }
